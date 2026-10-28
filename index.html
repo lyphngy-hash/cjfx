@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5BC8F5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="超级飞侠">
+<meta name="description" content="超级飞侠大救援 - 点击泡泡救出超级飞侠！">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>超级飞侠大救援</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+
+body{
+  width:100%;height:100vh;overflow:hidden;
+  font-family:'Fredoka One','Segoe UI',system-ui,sans-serif;
+  user-select:none;
+  background:linear-gradient(180deg,#5BC8F5 0%,#A8E6FF 55%,#D4F5FF 100%);
+}
+
+#sky{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0;}
+.cloud{
+  position:absolute;background:#fff;border-radius:50px;opacity:.82;
+  animation:drift linear infinite;
+  pointer-events:none;
+}
+@keyframes drift{from{left:-220px}to{left:calc(100% + 220px)}}
+
+#ground{
+  position:absolute;bottom:0;left:0;right:0;height:80px;z-index:1;
+  background:linear-gradient(180deg,#78C850,#5BA832);
+  border-top:5px solid #4A9028;
+  pointer-events:none;
+}
+
+/* HUD */
+#hud{
+  position:absolute;top:0;left:0;right:0;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 0;pointer-events:none;
+}
+.hbox{
+  background:rgba(255,255,255,.85);
+  border-radius:20px;padding:5px 16px;
+  border:3px solid #fff;
+  display:flex;align-items:center;gap:6px;
+  box-shadow:0 3px 10px rgba(0,0,0,.13);
+}
+.hlabel{font-size:12px;color:#555;}
+.hval{font-size:24px;line-height:1;font-weight:700;}
+#sv{color:#D32F2F;}
+#tv{color:#1565C0;}
+#rv{color:#2E7D32;}
+#tv.hurry{color:#D32F2F;animation:blink .5s ease infinite alternate;}
+@keyframes blink{to{transform:scale(1.15);}}
+
+/* Game canvas layer */
+#gameLayer{position:absolute;inset:0;z-index:5;}
+
+/* Overlays */
+.overlay{
+  position:absolute;inset:0;z-index:30;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  background:rgba(10,60,180,.42);
+  backdrop-filter:blur(10px);
+}
+.overlay h1{
+  font-size:clamp(26px,7vw,52px);color:#fff;
+  text-shadow:0 3px 14px rgba(0,0,0,.4);text-align:center;line-height:1.25;
+}
+.overlay p{font-size:clamp(13px,3.5vw,19px);color:#ffe;text-align:center;max-width:300px;line-height:1.55;}
+.hero-row{font-size:36px;display:flex;gap:8px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.2));}
+.big-btn{
+  background:linear-gradient(135deg,#FF7043,#E53935);
+  color:#fff;border:none;border-radius:32px;
+  padding:13px 40px;font-size:20px;font-family:inherit;
+  cursor:pointer;box-shadow:0 5px 18px rgba(0,0,0,.25);
+}
+.big-btn:active{transform:scale(.96);}
+
+/* Countdown */
+#cd{
+  position:absolute;top:50%;left:50%;z-index:25;
+  transform:translate(-50%,-50%) scale(0);
+  font-size:86px;color:#fff;font-family:inherit;
+  text-shadow:0 4px 22px rgba(0,0,0,.3);pointer-events:none;
+}
+
+/* Feedback */
+#fb{
+  position:absolute;top:30%;left:50%;z-index:22;
+  transform:translate(-50%,-50%) scale(0);
+  font-size:clamp(28px,7vw,52px);pointer-events:none;
+  text-shadow:0 3px 12px rgba(0,0,0,.22);
+  white-space:nowrap;
+}
+
+/* Floater score */
+.floater{
+  position:absolute;z-index:20;pointer-events:none;
+  font-size:26px;font-family:inherit;font-weight:700;
+  text-shadow:0 2px 8px rgba(0,0,0,.2);
+  transform:translateX(-50%);
+  animation:fup .85s ease-out forwards;
+}
+@keyframes fup{0%{opacity:1;margin-top:0}100%{opacity:0;margin-top:-60px}}
+</style>
+</head>
+<body>
+
+<div id="sky"></div>
+<div id="ground"></div>
+<canvas id="gameLayer"></canvas>
+
+<div id="hud">
+  <div class="hbox"><span class="hlabel">⭐ 分数</span><span class="hval" id="sv">0</span></div>
+  <div class="hbox"><span class="hlabel">⏱</span><span class="hval" id="tv">60</span></div>
+  <div class="hbox"><span class="hlabel">🚁 救援</span><span class="hval" id="rv">0</span></div>
+</div>
+
+<div id="cd"></div>
+<div id="fb"></div>
+
+<div class="overlay" id="startScr">
+  <div style="font-size:22px;letter-spacing:4px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.2))">✈️ 🚁 🛫 🚔 🌊 📦 🚨</div>
+  <h1>超级飞侠<br>大救援！</h1>
+  <p>乐迪、小爱、多多、酷飞<br>被困在泡泡里啦！<br>快点击泡泡救出他们 🎉<br><span style="font-size:0.85em;opacity:0.85">小心怪兽和炸弹，点错要扣分哦！</span></p>
+  <button class="big-btn" id="startBtn">出发！🚀</button>
+</div>
+
+<div class="overlay" id="endScr" style="display:none;">
+  <h1 id="endTitle">任务完成！🎉</h1>
+  <div style="font-size:54px" id="endEmoji">🏆</div>
+  <p id="endMsg"></p>
+  <button class="big-btn" id="restartBtn">再来一次！🚀</button>
+</div>
+
+<script>
+// ── Canvas setup ──────────────────────────────────────────────
+const cv = document.getElementById('gameLayer');
+const ctx = cv.getContext('2d');
+let W, H;
+function resize(){
+  W = cv.width = window.innerWidth;
+  H = cv.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Characters ────────────────────────────────────────────────
+// ── 共用绘图工具 ─────────────────────────────────────────────
+// 画可爱的卡通眼睛（大白眼+彩色瞳孔+高光）
+function drawFace(ctx, cx, cy, r, eyeCol='#1a1a2e', mouthCol='#c0392b'){
+  // 左眼
+  [-1,1].forEach(side=>{
+    const ex=cx+side*r*0.22, ey=cy-r*0.06;
+    ctx.beginPath(); ctx.arc(ex,ey,r*0.13,0,Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(ex+side*r*0.03,ey,r*0.075,0,Math.PI*2);
+    ctx.fillStyle=eyeCol; ctx.fill();
+    ctx.beginPath(); ctx.arc(ex+side*r*0.04,ey-r*0.025,r*0.028,0,Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+  });
+  // 笑口
+  ctx.beginPath();
+  ctx.arc(cx,cy+r*0.12,r*0.14,0.2,Math.PI-0.2);
+  ctx.strokeStyle=mouthCol; ctx.lineWidth=r*0.045; ctx.lineCap='round'; ctx.stroke();
+}
+
+// 画窗玻璃（蓝色半透明驾驶舱）
+function drawWindow(ctx,x,y,rx,ry){
+  const g=ctx.createLinearGradient(x-rx,y-ry,x+rx,y+ry);
+  g.addColorStop(0,'#e3f6fd'); g.addColorStop(1,'#81d4fa');
+  ctx.fillStyle=g; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=rx*0.18; ctx.stroke();
+}
+
+// ── 超级飞侠英雄 ──────────────────────────────────────────────
+const HEROES = [
+
+  // ① 乐迪 Jett — 红色超音速喷气机，黄色大舱盖，橙色爆焰
+  {
+    name:'乐迪', color:'#e53935',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 后掠翼（先画，在机身下面）
+      [1,-1].forEach(s=>{
+        ctx.beginPath();
+        ctx.moveTo(r*0.10, s*r*0.02);
+        ctx.lineTo(-r*0.30, s*r*0.52);
+        ctx.lineTo(-r*0.52, s*r*0.52);
+        ctx.lineTo(-r*0.18, s*r*0.02);
+        ctx.closePath();
+        ctx.fillStyle='#ef5350'; ctx.fill();
+        ctx.strokeStyle='#b71c1c'; ctx.lineWidth=r*0.03; ctx.stroke();
+      });
+      // 垂尾
+      ctx.beginPath();
+      ctx.moveTo(-r*0.50,0); ctx.lineTo(-r*0.74,-r*0.38); ctx.lineTo(-r*0.60,0);
+      ctx.fillStyle='#c62828'; ctx.fill(); ctx.strokeStyle='#b71c1c'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 机身
+      ctx.beginPath();
+      ctx.ellipse(0,0, r*0.66, r*0.22, 0, 0, Math.PI*2);
+      ctx.fillStyle='#e53935'; ctx.fill(); ctx.strokeStyle='#b71c1c'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 机头（向右）
+      ctx.beginPath();
+      ctx.moveTo(r*0.66,0);
+      ctx.bezierCurveTo(r*0.88,-r*0.04, r*0.92,-r*0.02, r*0.92,0);
+      ctx.bezierCurveTo(r*0.92,r*0.02, r*0.88,r*0.04, r*0.66,0);
+      ctx.fillStyle='#ff7043'; ctx.fill();
+      // 黄色大舱盖（乐迪标志！）
+      ctx.beginPath();
+      ctx.ellipse(r*0.24,-r*0.10, r*0.26, r*0.16, -0.25, 0, Math.PI*2);
+      ctx.fillStyle='#ffd600'; ctx.fill(); ctx.strokeStyle='#f9a825'; ctx.lineWidth=r*0.035; ctx.stroke();
+      // 舱盖高光
+      ctx.beginPath(); ctx.ellipse(r*0.18,-r*0.16,r*0.10,r*0.05,-0.25,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.fill();
+      // 引擎火焰
+      const fl=ctx.createRadialGradient(-r*0.66,0,0,-r*0.66,0,r*0.18);
+      fl.addColorStop(0,'#fff176'); fl.addColorStop(0.4,'#ff6f00'); fl.addColorStop(1,'rgba(255,111,0,0)');
+      ctx.beginPath(); ctx.arc(-r*0.66,0,r*0.18,0,Math.PI*2);
+      ctx.fillStyle=fl; ctx.fill();
+      // 红白条纹
+      ctx.beginPath(); ctx.rect(r*0.0,-r*0.22,r*0.55,r*0.06);
+      ctx.fillStyle='#fff'; ctx.fill();
+      // 笑脸（在舱盖上）
+      drawFace(ctx, r*0.24, -r*0.10, r*0.14, '#1a237e','#c62828');
+      ctx.restore();
+    }
+  },
+
+  // ② 多多 Donnie — 黄色工程/建设飞机，有吊臂，橙色驾驶舱
+  {
+    name:'多多', color:'#ffb300',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 机翼（平直翼）
+      [1,-1].forEach(s=>{
+        ctx.beginPath();
+        ctx.moveTo(-r*0.10,s*r*0.04);
+        ctx.lineTo(-r*0.10,s*r*0.52);
+        ctx.lineTo(r*0.18,s*r*0.52);
+        ctx.lineTo(r*0.22,s*r*0.04);
+        ctx.closePath();
+        ctx.fillStyle='#ffa000'; ctx.fill();
+        ctx.strokeStyle='#e65100'; ctx.lineWidth=r*0.03; ctx.stroke();
+      });
+      // 主机身（圆润方型）
+      ctx.beginPath();
+      ctx.roundRect(-r*0.62,-r*0.26,r*1.18,r*0.52,r*0.18);
+      ctx.fillStyle='#ffb300'; ctx.fill(); ctx.strokeStyle='#f57f17'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 橙色驾驶舱（左侧凸起）
+      ctx.beginPath();
+      ctx.roundRect(-r*0.60,-r*0.38,r*0.52,r*0.38,r*0.12);
+      ctx.fillStyle='#ff8f00'; ctx.fill(); ctx.strokeStyle='#e65100'; ctx.lineWidth=r*0.035; ctx.stroke();
+      // 挡风玻璃
+      ctx.beginPath(); ctx.roundRect(-r*0.54,-r*0.32,r*0.38,r*0.26,r*0.08);
+      drawWindow(ctx,-r*0.35,-r*0.19,r*0.38,r*0.26);
+      // 吊臂（右上方）
+      ctx.beginPath();
+      ctx.moveTo(r*0.40,-r*0.10); ctx.lineTo(r*0.68,-r*0.52);
+      ctx.strokeStyle='#5d4037'; ctx.lineWidth=r*0.08; ctx.lineCap='round'; ctx.stroke();
+      // 吊钩
+      ctx.beginPath(); ctx.arc(r*0.68,-r*0.52,r*0.06,0,Math.PI*2);
+      ctx.fillStyle='#795548'; ctx.fill();
+      // 机轮
+      [[-r*0.38,r*0.30],[r*0.25,r*0.30]].forEach(([wx,wy])=>{
+        ctx.beginPath(); ctx.arc(wx,wy,r*0.15,0,Math.PI*2);
+        ctx.fillStyle='#37474f'; ctx.fill();
+        ctx.beginPath(); ctx.arc(wx,wy,r*0.07,0,Math.PI*2);
+        ctx.fillStyle='#b0bec5'; ctx.fill();
+      });
+      // 黑黄警示条纹
+      for(let i=0;i<3;i++){
+        ctx.fillStyle=i%2?'#212121':'#ffb300';
+        ctx.fillRect(-r*0.05+i*r*0.18,-r*0.26,r*0.16,r*0.08);
+      }
+      // 笑脸
+      drawFace(ctx,-r*0.26,-r*0.18,r*0.15,'#1a237e','#bf360c');
+      ctx.restore();
+    }
+  },
+
+  // ③ 小爱 Dizzy — 粉红直升机，爱心标志，大旋翼
+  {
+    name:'小爱', color:'#e91e63',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 机身（圆润椭圆）
+      ctx.beginPath();
+      ctx.ellipse(0,r*0.12, r*0.52, r*0.30, 0, 0, Math.PI*2);
+      ctx.fillStyle='#f06292'; ctx.fill(); ctx.strokeStyle='#880e4f'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 气泡舱（粉白）
+      ctx.beginPath(); ctx.arc(r*0.12,-r*0.06, r*0.32, 0, Math.PI*2);
+      ctx.fillStyle='#fce4ec'; ctx.fill(); ctx.strokeStyle='#c2185b'; ctx.lineWidth=r*0.035; ctx.stroke();
+      // 驾驶舱玻璃
+      ctx.beginPath(); ctx.arc(r*0.14,-r*0.05, r*0.21, 0, Math.PI*2);
+      drawWindow(ctx,r*0.14,-r*0.05,r*0.21,r*0.21);
+      // 旋翼主轴
+      ctx.beginPath(); ctx.moveTo(-r*0.04,-r*0.32); ctx.lineTo(-r*0.04,-r*0.56);
+      ctx.strokeStyle='#ad1457'; ctx.lineWidth=r*0.07; ctx.lineCap='round'; ctx.stroke();
+      // 旋翼（3叶）
+      ctx.save(); ctx.translate(-r*0.04,-r*0.56);
+      [0,1,2].forEach(i=>{
+        ctx.save(); ctx.rotate(i*Math.PI*2/3);
+        ctx.beginPath(); ctx.ellipse(r*0.42,0,r*0.40,r*0.08,0,0,Math.PI*2);
+        ctx.fillStyle='#f48fb1'; ctx.fill(); ctx.strokeStyle='#c2185b'; ctx.lineWidth=r*0.025; ctx.stroke();
+        ctx.restore();
+      });
+      ctx.restore();
+      // 尾梁
+      ctx.beginPath(); ctx.moveTo(-r*0.48,r*0.12); ctx.lineTo(-r*0.82,r*0.04);
+      ctx.strokeStyle='#ad1457'; ctx.lineWidth=r*0.12; ctx.lineCap='round'; ctx.stroke();
+      // 尾旋翼
+      ctx.beginPath(); ctx.arc(-r*0.82,r*0.04,r*0.12,0,Math.PI*2);
+      ctx.fillStyle='#e91e63'; ctx.fill(); ctx.strokeStyle='#880e4f'; ctx.lineWidth=r*0.03; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-r*0.82,r*0.04-r*0.12); ctx.lineTo(-r*0.82,r*0.04+r*0.12);
+      ctx.strokeStyle='#fce4ec'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 爱心标志（小爱最大特征！）
+      ctx.save(); ctx.translate(r*0.0,r*0.18);
+      ctx.beginPath();
+      const hs=r*0.12;
+      ctx.moveTo(0,-hs*0.3);
+      ctx.bezierCurveTo(hs,-hs*1.0, hs*2,hs*0.2, 0,hs);
+      ctx.bezierCurveTo(-hs*2,hs*0.2, -hs,-hs*1.0, 0,-hs*0.3);
+      ctx.fillStyle='#fff'; ctx.fill();
+      ctx.restore();
+      // 起落架
+      [r*0.18,-r*0.18].forEach(sy=>{
+        ctx.beginPath(); ctx.moveTo(-r*0.35,r*0.40+sy*0.1); ctx.lineTo(r*0.28,r*0.40+sy*0.1);
+        ctx.strokeStyle='#c2185b'; ctx.lineWidth=r*0.055; ctx.lineCap='round'; ctx.stroke();
+      });
+      // 笑脸
+      drawFace(ctx,r*0.14,-r*0.06,r*0.18,'#880e4f','#880e4f');
+      ctx.restore();
+    }
+  },
+
+  // ④ 酷飞 Jerome — 蓝白特技双翼机，星星标志，螺旋桨
+  {
+    name:'酷飞', color:'#1e88e5',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 上翼
+      ctx.beginPath();
+      ctx.moveTo(-r*0.35,-r*0.24); ctx.lineTo(r*0.28,-r*0.24);
+      ctx.lineTo(r*0.32,-r*0.52); ctx.lineTo(-r*0.44,-r*0.52);
+      ctx.closePath();
+      ctx.fillStyle='#1565c0'; ctx.fill(); ctx.strokeStyle='#0d47a1'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 下翼
+      ctx.beginPath();
+      ctx.moveTo(-r*0.28,r*0.24); ctx.lineTo(r*0.20,r*0.24);
+      ctx.lineTo(r*0.24,r*0.48); ctx.lineTo(-r*0.35,r*0.48);
+      ctx.closePath();
+      ctx.fillStyle='#1565c0'; ctx.fill(); ctx.strokeStyle='#0d47a1'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 支柱
+      [[-r*0.08,r*0.08],[r*0.14,-r*0.04]].forEach(([x1,x2])=>{
+        ctx.beginPath(); ctx.moveTo(x1,-r*0.24); ctx.lineTo(x2,r*0.24);
+        ctx.strokeStyle='#0d47a1'; ctx.lineWidth=r*0.04; ctx.stroke();
+      });
+      // 机身
+      ctx.beginPath(); ctx.ellipse(0,0,r*0.60,r*0.20,0,0,Math.PI*2);
+      ctx.fillStyle='#1e88e5'; ctx.fill(); ctx.strokeStyle='#0d47a1'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 白色腰带条纹
+      ctx.beginPath(); ctx.rect(-r*0.40,-r*0.07,r*0.80,r*0.14);
+      ctx.fillStyle='#fff'; ctx.fill();
+      // 红色星星（酷飞标志！）
+      ctx.save(); ctx.translate(0,0);
+      ctx.beginPath();
+      for(let i=0;i<5;i++){
+        const a=i*Math.PI*0.4-Math.PI/2;
+        const ai=a+Math.PI*0.2;
+        const or=r*0.09, ir=r*0.04;
+        i===0?ctx.moveTo(Math.cos(a)*or,Math.sin(a)*or):ctx.lineTo(Math.cos(a)*or,Math.sin(a)*or);
+        ctx.lineTo(Math.cos(ai)*ir,Math.sin(ai)*ir);
+      }
+      ctx.closePath(); ctx.fillStyle='#ff1744'; ctx.fill();
+      ctx.restore();
+      // 螺旋桨
+      ctx.save(); ctx.translate(r*0.70,0);
+      ctx.beginPath(); ctx.arc(0,0,r*0.06,0,Math.PI*2);
+      ctx.fillStyle='#90caf9'; ctx.fill();
+      [0,1].forEach(i=>{
+        ctx.save(); ctx.rotate(i*Math.PI+Math.PI/2);
+        ctx.beginPath(); ctx.ellipse(0,-r*0.20,r*0.05,r*0.22,0,0,Math.PI*2);
+        ctx.fillStyle='#5d4037'; ctx.fill(); ctx.restore();
+      });
+      ctx.restore();
+      // 驾驶舱
+      ctx.beginPath(); ctx.ellipse(r*0.10,-r*0.06,r*0.20,r*0.13,0,0,Math.PI*2);
+      drawWindow(ctx,r*0.10,-r*0.06,r*0.20,r*0.13);
+      // 垂尾
+      ctx.beginPath();
+      ctx.moveTo(-r*0.55,0); ctx.lineTo(-r*0.76,-r*0.32); ctx.lineTo(-r*0.62,0);
+      ctx.fillStyle='#1e88e5'; ctx.fill(); ctx.strokeStyle='#0d47a1'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 笑脸
+      drawFace(ctx,r*0.10,-r*0.06,r*0.11,'#0d47a1','#c62828');
+      ctx.restore();
+    }
+  },
+
+  // ⑤ 小青 Mira — 蓝绿水上/潜水飞机，鱼鳍，气泡
+  {
+    name:'小青', color:'#00897b',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 鱼尾翼
+      ctx.beginPath();
+      ctx.moveTo(-r*0.55,-r*0.04);
+      ctx.lineTo(-r*0.82,-r*0.38); ctx.lineTo(-r*0.72,-r*0.06);
+      ctx.moveTo(-r*0.55,r*0.04);
+      ctx.lineTo(-r*0.82,r*0.38); ctx.lineTo(-r*0.72,r*0.06);
+      ctx.fillStyle='#00695c'; ctx.fill(); ctx.strokeStyle='#004d40'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 机翼（三角）
+      [1,-1].forEach(s=>{
+        ctx.beginPath();
+        ctx.moveTo(r*0.06,s*r*0.04); ctx.lineTo(-r*0.20,s*r*0.50); ctx.lineTo(-r*0.40,s*r*0.04);
+        ctx.closePath(); ctx.fillStyle='#00796b'; ctx.fill(); ctx.strokeStyle='#004d40'; ctx.lineWidth=r*0.03; ctx.stroke();
+      });
+      // 流线型机身
+      ctx.beginPath(); ctx.ellipse(0,0,r*0.65,r*0.25,0,0,Math.PI*2);
+      ctx.fillStyle='#26a69a'; ctx.fill(); ctx.strokeStyle='#00695c'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 背鳍
+      ctx.beginPath();
+      ctx.moveTo(-r*0.10,-r*0.25); ctx.lineTo(r*0.05,-r*0.48); ctx.lineTo(r*0.20,-r*0.25);
+      ctx.fillStyle='#00897b'; ctx.fill(); ctx.strokeStyle='#004d40'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 驾驶舱（圆形）
+      ctx.beginPath(); ctx.arc(r*0.22,0,r*0.26,0,Math.PI*2);
+      ctx.fillStyle='#b2dfdb'; ctx.fill(); ctx.strokeStyle='#00695c'; ctx.lineWidth=r*0.035; ctx.stroke();
+      // 玻璃
+      ctx.beginPath(); ctx.arc(r*0.22,0,r*0.18,0,Math.PI*2);
+      drawWindow(ctx,r*0.22,0,r*0.18,r*0.18);
+      // 螺旋桨
+      ctx.save(); ctx.translate(r*0.72,0);
+      ctx.beginPath(); ctx.arc(0,0,r*0.06,0,Math.PI*2); ctx.fillStyle='#80cbc4'; ctx.fill();
+      [0,1,2].forEach(i=>{
+        ctx.save(); ctx.rotate(i*Math.PI*2/3);
+        ctx.beginPath(); ctx.ellipse(0,-r*0.18,r*0.05,r*0.20,0,0,Math.PI*2);
+        ctx.fillStyle='#004d40'; ctx.fill(); ctx.restore();
+      });
+      ctx.restore();
+      // 气泡装饰
+      [[r*0.42,r*0.18,r*0.05],[r*0.55,r*0.24,r*0.035],[r*0.35,r*0.28,r*0.028]].forEach(([bx,by,br])=>{
+        ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
+        ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=r*0.02; ctx.stroke();
+      });
+      // 笑脸
+      drawFace(ctx,r*0.22,0,r*0.15,'#004d40','#004d40');
+      ctx.restore();
+    }
+  },
+
+  // ⑥ 大壮 — 绿色恐龙飞侠！霸王龙造型机身，背脊，尾巴，恐龙头机鼻
+  {
+    name:'大壮', color:'#388e3c',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+
+      // 恐龙尾巴（机尾，向右上翘起）
+      ctx.beginPath();
+      ctx.moveTo(-r*0.52, r*0.04);
+      ctx.quadraticCurveTo(-r*0.72, r*0.10, -r*0.85, -r*0.10);
+      ctx.quadraticCurveTo(-r*0.92, -r*0.22, -r*0.80, -r*0.30);
+      ctx.quadraticCurveTo(-r*0.70, -r*0.20, -r*0.65, -r*0.06);
+      ctx.closePath();
+      ctx.fillStyle='#2e7d32'; ctx.fill(); ctx.strokeStyle='#1b5e20'; ctx.lineWidth=r*0.03; ctx.stroke();
+
+      // 小翼（前肢翼，恐龙手臂感）
+      [1,-1].forEach(s=>{
+        ctx.beginPath();
+        ctx.moveTo(r*0.05, s*r*0.06);
+        ctx.lineTo(-r*0.10, s*r*0.46);
+        ctx.lineTo(-r*0.32, s*r*0.46);
+        ctx.lineTo(-r*0.28, s*r*0.06);
+        ctx.closePath();
+        ctx.fillStyle='#43a047'; ctx.fill();
+        ctx.strokeStyle='#2e7d32'; ctx.lineWidth=r*0.03; ctx.stroke();
+        // 翼尖爪子
+        [0,1,2].forEach(ci=>{
+          ctx.beginPath();
+          ctx.moveTo(-r*0.32+ci*r*0.06, s*r*0.46);
+          ctx.lineTo(-r*0.36+ci*r*0.06, s*r*0.54);
+          ctx.lineTo(-r*0.30+ci*r*0.06, s*r*0.46);
+          ctx.fillStyle='#1b5e20'; ctx.fill();
+        });
+      });
+
+      // 主机身（圆滚滚恐龙身体）
+      ctx.beginPath();
+      ctx.ellipse(0, r*0.02, r*0.60, r*0.28, 0, 0, Math.PI*2);
+      ctx.fillStyle='#4caf50'; ctx.fill(); ctx.strokeStyle='#2e7d32'; ctx.lineWidth=r*0.045; ctx.stroke();
+
+      // 背部棘刺（霸王龙标志！沿机背排列）
+      const spines = [
+        [-r*0.30, -r*0.28, r*0.07, r*0.16],
+        [-r*0.12, -r*0.28, r*0.07, r*0.20],
+        [ r*0.06, -r*0.27, r*0.065, r*0.17],
+        [ r*0.22, -r*0.25, r*0.055, r*0.13],
+      ];
+      spines.forEach(([sx,sy,sw,sh])=>{
+        ctx.beginPath();
+        ctx.moveTo(sx-sw, sy+sh);
+        ctx.lineTo(sx,    sy);
+        ctx.lineTo(sx+sw, sy+sh);
+        ctx.closePath();
+        ctx.fillStyle='#388e3c'; ctx.fill(); ctx.strokeStyle='#1b5e20'; ctx.lineWidth=r*0.025; ctx.stroke();
+      });
+
+      // 肚皮浅色（恐龙腹部）
+      ctx.beginPath();
+      ctx.ellipse(r*0.02, r*0.10, r*0.36, r*0.18, 0, 0, Math.PI*2);
+      ctx.fillStyle='#a5d6a7'; ctx.fill();
+
+      // 恐龙头（机鼻/机头，向右突出）
+      // 下颌
+      ctx.beginPath();
+      ctx.moveTo(r*0.52, r*0.10);
+      ctx.quadraticCurveTo(r*0.88, r*0.18, r*0.94, r*0.08);
+      ctx.quadraticCurveTo(r*0.88, r*0.02, r*0.60, r*0.02);
+      ctx.closePath();
+      ctx.fillStyle='#4caf50'; ctx.fill(); ctx.strokeStyle='#2e7d32'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 上颌
+      ctx.beginPath();
+      ctx.moveTo(r*0.52, -r*0.04);
+      ctx.quadraticCurveTo(r*0.88, -r*0.14, r*0.96, -r*0.02);
+      ctx.quadraticCurveTo(r*0.90, r*0.06, r*0.60, r*0.06);
+      ctx.closePath();
+      ctx.fillStyle='#66bb6a'; ctx.fill(); ctx.strokeStyle='#2e7d32'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 牙齿（锯齿）
+      for(let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.moveTo(r*0.60+i*r*0.08, r*0.04);
+        ctx.lineTo(r*0.63+i*r*0.08, r*0.10);
+        ctx.lineTo(r*0.67+i*r*0.08, r*0.04);
+        ctx.fillStyle='#fff'; ctx.fill();
+      }
+      // 鼻孔
+      ctx.beginPath(); ctx.arc(r*0.82, -r*0.09, r*0.035, 0, Math.PI*2);
+      ctx.fillStyle='#2e7d32'; ctx.fill();
+
+      // 驾驶舱眼睛（在恐龙额头上）
+      ctx.beginPath(); ctx.ellipse(r*0.50, -r*0.06, r*0.18, r*0.13, 0, 0, Math.PI*2);
+      drawWindow(ctx, r*0.50, -r*0.06, r*0.18, r*0.13);
+
+      // 恐龙表情（眼睛+眉毛）
+      drawFace(ctx, r*0.50, -r*0.07, r*0.11, '#1b5e20', '#1b5e20');
+
+      ctx.restore();
+    }
+  },
+
+  // ⑦ 包警长 Police — 深蓝警用飞机，警灯，警徽
+  {
+    name:'包警长', color:'#1a237e',
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 机翼
+      [1,-1].forEach(s=>{
+        ctx.beginPath();
+        ctx.moveTo(r*0.08,s*r*0.03); ctx.lineTo(-r*0.14,s*r*0.52);
+        ctx.lineTo(-r*0.42,s*r*0.52); ctx.lineTo(-r*0.25,s*r*0.03);
+        ctx.closePath(); ctx.fillStyle='#283593'; ctx.fill();
+        ctx.strokeStyle='#1a237e'; ctx.lineWidth=r*0.03; ctx.stroke();
+      });
+      // 垂尾
+      ctx.beginPath();
+      ctx.moveTo(-r*0.52,0); ctx.lineTo(-r*0.75,-r*0.36); ctx.lineTo(-r*0.62,0);
+      ctx.fillStyle='#283593'; ctx.fill(); ctx.strokeStyle='#1a237e'; ctx.lineWidth=r*0.03; ctx.stroke();
+      // 机身（深蓝）
+      ctx.beginPath(); ctx.ellipse(0,0,r*0.65,r*0.24,0,0,Math.PI*2);
+      ctx.fillStyle='#283593'; ctx.fill(); ctx.strokeStyle='#1a237e'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 白色警察横条
+      ctx.beginPath(); ctx.rect(-r*0.52,-r*0.09,r*1.05,r*0.18);
+      ctx.fillStyle='#fff'; ctx.fill();
+      // 蓝白格纹（警察标志！）
+      for(let i=0;i<7;i++){
+        if(i%2===0){
+          ctx.fillStyle='#1a237e';
+          ctx.fillRect(-r*0.52+i*r*0.15,-r*0.09,r*0.14,r*0.09);
+        }
+      }
+      // 机头
+      ctx.beginPath();
+      ctx.moveTo(r*0.65,0);
+      ctx.bezierCurveTo(r*0.88,-r*0.04,r*0.90,0,r*0.90,0);
+      ctx.bezierCurveTo(r*0.90,0,r*0.88,r*0.04,r*0.65,0);
+      ctx.fillStyle='#3949ab'; ctx.fill();
+      // 驾驶舱
+      ctx.beginPath(); ctx.ellipse(r*0.24,-r*0.08,r*0.22,r*0.14,0,0,Math.PI*2);
+      drawWindow(ctx,r*0.24,-r*0.08,r*0.22,r*0.14);
+      // 警灯（红蓝）
+      [-r*0.10,r*0.10].forEach((lx,i)=>{
+        ctx.beginPath(); ctx.arc(lx,-r*0.24,r*0.07,0,Math.PI*2);
+        ctx.fillStyle=i===0?'#f44336':'#2196f3'; ctx.fill();
+        ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.02; ctx.stroke();
+      });
+      // 警徽星形
+      ctx.save(); ctx.translate(r*0.50,0);
+      ctx.beginPath();
+      for(let i=0;i<6;i++){
+        const a=i*Math.PI/3-Math.PI/2;
+        const ai=a+Math.PI/6;
+        i===0?ctx.moveTo(Math.cos(a)*r*0.10,Math.sin(a)*r*0.10):ctx.lineTo(Math.cos(a)*r*0.10,Math.sin(a)*r*0.10);
+        ctx.lineTo(Math.cos(ai)*r*0.05,Math.sin(ai)*r*0.05);
+      }
+      ctx.closePath(); ctx.fillStyle='#ffd600'; ctx.fill();
+      ctx.restore();
+      // 笑脸
+      drawFace(ctx,r*0.24,-r*0.08,r*0.12,'#fff','#fff');
+      ctx.restore();
+    }
+  },
+];
+
+// ── 坏蛋 ─────────────────────────────────────────────────────
+const BADDIES = [
+  // 绿色大眼怪
+  {
+    name:'怪兽', color:'#558b2f', bad:true,
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 圆形身体
+      ctx.beginPath(); ctx.arc(0,r*0.05,r*0.50,0,Math.PI*2);
+      ctx.fillStyle='#7cb342'; ctx.fill(); ctx.strokeStyle='#33691e'; ctx.lineWidth=r*0.05; ctx.stroke();
+      // 头角
+      [[-r*0.20,-r*0.42],[r*0.20,-r*0.42]].forEach(([hx,hy])=>{
+        ctx.beginPath(); ctx.moveTo(hx,hy+r*0.12); ctx.lineTo(hx,hy); ctx.lineTo(hx+r*0.08,hy+r*0.12);
+        ctx.fillStyle='#827717'; ctx.fill();
+      });
+      // 大眼睛（愤怒）
+      [-r*0.18,r*0.18].forEach((ex,i)=>{
+        ctx.beginPath(); ctx.arc(ex,-r*0.02,r*0.14,0,Math.PI*2);
+        ctx.fillStyle='#ffeb3b'; ctx.fill(); ctx.strokeStyle='#33691e'; ctx.lineWidth=r*0.03; ctx.stroke();
+        ctx.beginPath(); ctx.arc(ex,-r*0.02,r*0.07,0,Math.PI*2);
+        ctx.fillStyle='#d50000'; ctx.fill();
+        // 愤怒眉毛
+        ctx.beginPath();
+        ctx.moveTo(ex-(i?-1:1)*r*0.16,-r*0.18);
+        ctx.lineTo(ex+(i?-1:1)*r*0.08,-r*0.22);
+        ctx.strokeStyle='#33691e'; ctx.lineWidth=r*0.06; ctx.lineCap='round'; ctx.stroke();
+      });
+      // 锯齿嘴
+      ctx.beginPath(); ctx.moveTo(-r*0.30,r*0.20);
+      for(let i=0;i<=5;i++) ctx.lineTo(-r*0.30+i*r*0.12, r*0.20+(i%2?r*0.14:0));
+      ctx.lineTo(r*0.30,r*0.20);
+      ctx.strokeStyle='#1b5e20'; ctx.lineWidth=r*0.05; ctx.lineCap='round'; ctx.stroke();
+      // 牙齿
+      for(let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.moveTo(-r*0.22+i*r*0.14,r*0.20);
+        ctx.lineTo(-r*0.22+i*r*0.14+r*0.04,r*0.30);
+        ctx.lineTo(-r*0.22+i*r*0.14+r*0.08,r*0.20);
+        ctx.fillStyle='#fff'; ctx.fill();
+      }
+      ctx.restore();
+    }
+  },
+  // 黑色炸弹
+  {
+    name:'炸弹', color:'#37474f', bad:true,
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 炸弹球体
+      const bg=ctx.createRadialGradient(-r*0.15,-r*0.15,0,0,0,r*0.46);
+      bg.addColorStop(0,'#546e7a'); bg.addColorStop(1,'#1c313a');
+      ctx.beginPath(); ctx.arc(0,r*0.08,r*0.46,0,Math.PI*2);
+      ctx.fillStyle=bg; ctx.fill(); ctx.strokeStyle='#000'; ctx.lineWidth=r*0.05; ctx.stroke();
+      // 反光
+      ctx.beginPath(); ctx.arc(-r*0.18,-r*0.10,r*0.10,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.18)'; ctx.fill();
+      // 引线
+      ctx.beginPath(); ctx.moveTo(0,-r*0.46);
+      ctx.quadraticCurveTo(r*0.22,-r*0.62,r*0.12,-r*0.76);
+      ctx.strokeStyle='#8d6e63'; ctx.lineWidth=r*0.07; ctx.lineCap='round'; ctx.stroke();
+      // 火花
+      ctx.save(); ctx.translate(r*0.12,-r*0.76);
+      [0,1,2,3,4,5,6].forEach(i=>{
+        ctx.beginPath();
+        const a=i*(Math.PI*2/7);
+        ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*r*0.12,Math.sin(a)*r*0.12);
+        ctx.strokeStyle=i%2?'#ffd600':'#ff6f00'; ctx.lineWidth=r*0.055; ctx.stroke();
+      });
+      ctx.restore();
+      // 骷髅脸（X眼）
+      [-r*0.16,r*0.16].forEach(ex=>{
+        // X眼
+        ctx.beginPath();
+        ctx.moveTo(ex-r*0.08,r*0.00); ctx.lineTo(ex+r*0.08,r*0.16);
+        ctx.moveTo(ex+r*0.08,r*0.00); ctx.lineTo(ex-r*0.08,r*0.16);
+        ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.05; ctx.lineCap='round'; ctx.stroke();
+      });
+      // 嘴巴锯齿
+      ctx.beginPath(); ctx.moveTo(-r*0.22,r*0.28);
+      for(let i=0;i<4;i++) ctx.lineTo(-r*0.22+i*r*0.14+r*0.07,r*0.28+(i%2?r*0.08:0));
+      ctx.lineTo(r*0.22,r*0.28);
+      ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.04; ctx.lineCap='round'; ctx.stroke();
+      ctx.restore();
+    }
+  },
+  // 白色幽灵
+  {
+    name:'幽灵', color:'#78909c', bad:true,
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 幽灵身体
+      ctx.beginPath();
+      ctx.arc(0,-r*0.08,r*0.46,Math.PI,0,false);
+      ctx.lineTo(r*0.46,r*0.30);
+      for(let i=4;i>=0;i--){
+        const wx=-r*0.46+i*r*0.23;
+        ctx.quadraticCurveTo(wx+r*0.12,r*0.52,wx,r*0.30);
+      }
+      ctx.closePath();
+      const gg=ctx.createLinearGradient(0,-r*0.54,0,r*0.52);
+      gg.addColorStop(0,'#eceff1'); gg.addColorStop(1,'#b0bec5');
+      ctx.fillStyle=gg; ctx.fill();
+      ctx.strokeStyle='#607d8b'; ctx.lineWidth=r*0.04; ctx.stroke();
+      // 空洞眼睛
+      [[-r*0.18,-r*0.12],[r*0.18,-r*0.12]].forEach(([ex,ey])=>{
+        ctx.beginPath(); ctx.ellipse(ex,ey,r*0.10,r*0.14,0,0,Math.PI*2);
+        ctx.fillStyle='#263238'; ctx.fill();
+      });
+      // 波浪嘴
+      ctx.beginPath(); ctx.moveTo(-r*0.22,r*0.08);
+      ctx.quadraticCurveTo(-r*0.11,r*0.20,0,r*0.08);
+      ctx.quadraticCurveTo(r*0.11,r*0.20,r*0.22,r*0.08);
+      ctx.strokeStyle='#263238'; ctx.lineWidth=r*0.05; ctx.lineCap='round'; ctx.stroke();
+      // 幽灵光晕
+      ctx.beginPath(); ctx.arc(0,-r*0.08,r*0.50,Math.PI,0);
+      const hg=ctx.createLinearGradient(0,-r*0.58,0,-r*0.08);
+      hg.addColorStop(0,'rgba(255,255,255,0.4)'); hg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=hg; ctx.fill();
+      ctx.restore();
+    }
+  },
+  // 紫色独眼章鱼怪
+  {
+    name:'章鱼怪', color:'#6a1b9a', bad:true,
+    draw(ctx,x,y,r){
+      ctx.save(); ctx.translate(x,y);
+      // 触手（先画在身体下面）
+      for(let i=0;i<6;i++){
+        const a=(i/6)*Math.PI*2+Math.PI/12;
+        const tx=Math.cos(a)*r*0.40, ty=Math.sin(a)*r*0.40;
+        ctx.beginPath(); ctx.moveTo(tx,ty);
+        ctx.quadraticCurveTo(
+          Math.cos(a)*r*0.70+Math.sin(a)*r*0.20,
+          Math.sin(a)*r*0.70,
+          Math.cos(a)*r*0.85, Math.sin(a)*r*0.85
+        );
+        ctx.strokeStyle='#7b1fa2'; ctx.lineWidth=r*0.10; ctx.lineCap='round'; ctx.stroke();
+        // 吸盘
+        ctx.beginPath(); ctx.arc(Math.cos(a)*r*0.72,Math.sin(a)*r*0.72,r*0.04,0,Math.PI*2);
+        ctx.fillStyle='#ce93d8'; ctx.fill();
+      }
+      // 身体圆球
+      const bg=ctx.createRadialGradient(-r*0.12,-r*0.12,0,0,0,r*0.44);
+      bg.addColorStop(0,'#ab47bc'); bg.addColorStop(1,'#6a1b9a');
+      ctx.beginPath(); ctx.arc(0,0,r*0.44,0,Math.PI*2);
+      ctx.fillStyle=bg; ctx.fill(); ctx.strokeStyle='#4a148c'; ctx.lineWidth=r*0.05; ctx.stroke();
+      // 单只大眼
+      ctx.beginPath(); ctx.arc(0,-r*0.06,r*0.26,0,Math.PI*2);
+      ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#4a148c'; ctx.lineWidth=r*0.04; ctx.stroke();
+      ctx.beginPath(); ctx.arc(r*0.04,-r*0.06,r*0.14,0,Math.PI*2);
+      ctx.fillStyle='#1a237e'; ctx.fill();
+      ctx.beginPath(); ctx.arc(r*0.06,-r*0.10,r*0.06,0,Math.PI*2);
+      ctx.fillStyle='#fff'; ctx.fill();
+      // 斜眉（凶相）
+      ctx.beginPath(); ctx.moveTo(-r*0.26,-r*0.32); ctx.lineTo(r*0.26,-r*0.26);
+      ctx.strokeStyle='#4a148c'; ctx.lineWidth=r*0.07; ctx.lineCap='round'; ctx.stroke();
+      ctx.restore();
+    }
+  },
+];
+
+
+// ── Audio ─────────────────────────────────────────────────────
+let ac;
+function getAC(){ if(!ac) ac=new(window.AudioContext||window.webkitAudioContext)(); return ac; }
+function playChord(freqs, type='triangle', vol=0.28, dur=0.5){
+  try{
+    const a=getAC(), now=a.currentTime;
+    freqs.forEach((f,i)=>{
+      const o=a.createOscillator(), g=a.createGain(), t=now+i*.07;
+      o.type=type; o.frequency.value=f;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(vol,t+.03);
+      g.gain.exponentialRampToValueAtTime(.001,t+dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(t); o.stop(t+dur+.05);
+    });
+  }catch(e){}
+}
+const playHero   = ()=> playChord([523,659,784,1047]);
+const playBad    = ()=> playChord([220,180,140],'sawtooth',0.3,0.35);
+const playStart  = ()=> playChord([392,523,659,784],undefined,0.25,0.6);
+const playWin    = ()=> playChord([523,659,784,1047,1319],undefined,0.25,0.7);
+const playLose   = ()=> playChord([330,294,262],undefined,0.25,0.55);
+
+// ── Bubble class (JS-driven position) ─────────────────────────
+class Bubble {
+  constructor(){
+    const isHero = Math.random() < 0.65;
+    const pool   = isHero ? HEROES : BADDIES;
+    this.char  = pool[Math.floor(Math.random()*pool.length)];
+    this.r     = 44 + Math.random()*34;           // radius 44–78
+    this.x     = this.r + Math.random()*(W-this.r*2);
+    this.y     = H + this.r;                      // start below screen
+    this.vy    = -(1.1 + Math.random()*1.2);      // upward speed px/frame
+    this.wobT  = Math.random()*Math.PI*2;
+    this.wobSpd= 0.025+Math.random()*0.02;
+    this.alpha = 0;
+    this.dead  = false;
+    this.popping = false;
+    this.popT  = 0;
+    this.popParts = [];
+    // pre-render emoji at 2× for sharpness
+    this.eSize = Math.round(this.r * 0.9);
+  }
+
+  update(){
+    if(this.popping){
+      this.popT++;
+      this.popParts.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.life--;
+      });
+      if(this.popT>28) this.dead=true;
+      return;
+    }
+    this.wobT += this.wobSpd;
+    this.x    += Math.sin(this.wobT)*0.55;
+    this.y    += this.vy;
+    this.alpha = Math.min(1, this.alpha+0.06);
+    if(this.y+this.r < -10) this.dead=true;
+  }
+
+  pop(){
+    this.popping = true;
+    const n = 14;
+    for(let i=0;i<n;i++){
+      const a=(i/n)*Math.PI*2+Math.random()*.5;
+      const s=2.5+Math.random()*4;
+      this.popParts.push({
+        x:this.x, y:this.y,
+        vx:Math.cos(a)*s, vy:Math.sin(a)*s-2,
+        r:4+Math.random()*5,
+        life:24,
+        color:this.char.color
+      });
+    }
+  }
+
+  draw(ctx){
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+
+    if(this.popping){
+      // Pop ring
+      const t=this.popT/28;
+      ctx.save();
+      ctx.globalAlpha=this.alpha*(1-t);
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,this.r*(1+t*1.8),0,Math.PI*2);
+      ctx.strokeStyle=this.char.color;
+      ctx.lineWidth=3;
+      ctx.stroke();
+      ctx.restore();
+      // Particles
+      this.popParts.forEach(p=>{
+        if(p.life<=0) return;
+        ctx.save();
+        ctx.globalAlpha=this.alpha*(p.life/24);
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r*(p.life/24),0,Math.PI*2);
+        ctx.fillStyle=p.color;
+        ctx.fill();
+        ctx.restore();
+      });
+      ctx.restore();
+      return;
+    }
+
+    const {x,y,r} = this;
+    const c = this.char.color;
+
+    // ── 3D bubble shell ──
+    // 1. coloured glow base
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle = c+'28';
+    ctx.fill();
+
+    // 2. main sphere gradient
+    const gMain = ctx.createRadialGradient(x-r*.28,y-r*.32,r*.04, x,y,r);
+    gMain.addColorStop(0, 'rgba(255,255,255,.72)');
+    gMain.addColorStop(0.35,'rgba(255,255,255,.18)');
+    gMain.addColorStop(0.7, c+'44');
+    gMain.addColorStop(1,   c+'88');
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=gMain;
+    ctx.fill();
+
+    // 3. character illustration — drawn BEFORE highlights so glass sits on top
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r*0.92, 0, Math.PI*2); ctx.clip();
+    this.char.draw(ctx, x, y, r);
+    ctx.restore();
+
+    // 4. rim
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.strokeStyle=c+'bb';
+    ctx.lineWidth=2.5;
+    ctx.stroke();
+
+    // 5. glass overlay — thin translucent layer to unify colour tint
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=c+'18';
+    ctx.fill();
+
+    // 6. big top-left highlight (main glass reflection)
+    const gHL = ctx.createRadialGradient(x-r*.36,y-r*.40,0, x-r*.22,y-r*.25,r*.55);
+    gHL.addColorStop(0,'rgba(255,255,255,.82)');
+    gHL.addColorStop(.45,'rgba(255,255,255,.12)');
+    gHL.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=gHL;
+    ctx.fill();
+
+    // 7. small bottom-right shimmer
+    ctx.beginPath();
+    ctx.ellipse(x+r*.30,y+r*.32,r*.16,r*.10,Math.PI*.1,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.32)';
+    ctx.fill();
+
+    // 7. name badge below bubble
+    ctx.font=`bold ${Math.max(11,r*.22)}px 'Fredoka One',sans-serif`;
+    ctx.textAlign='center';
+    ctx.textBaseline='top';
+    const bw=ctx.measureText(this.char.name).width+16;
+    const bh=r*.3; const bx=x-bw/2; const by2=y+r+5;
+    ctx.fillStyle='rgba(255,255,255,.88)';
+    ctx.beginPath();
+    ctx.roundRect(bx,by2,bw,bh,8);
+    ctx.fill();
+    ctx.fillStyle=this.char.bad?'#B71C1C':'#0D47A1';
+    ctx.fillText(this.char.name, x, by2+bh*.12);
+
+    ctx.restore();
+  }
+
+  hit(px,py){
+    const dx=px-this.x, dy=py-this.y;
+    return dx*dx+dy*dy<=this.r*this.r;
+  }
+}
+
+// ── Particle floater ──────────────────────────────────────────
+function spawnFloater(x,y,txt,color){
+  const d=document.createElement('div');
+  d.className='floater';
+  d.textContent=txt;
+  d.style.cssText=`color:${color};left:${x}px;top:${y}px;`;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(),900);
+}
+
+// ── Feedback flash ────────────────────────────────────────────
+const fbEl=document.getElementById('fb');
+let fbTmr;
+function showFB(txt,color){
+  fbEl.textContent=txt; fbEl.style.color=color;
+  fbEl.style.transition='none';
+  fbEl.style.transform='translate(-50%,-50%) scale(0)';
+  requestAnimationFrame(()=>{
+    fbEl.style.transition='transform .16s cubic-bezier(.17,.67,.3,1.4)';
+    fbEl.style.transform='translate(-50%,-50%) scale(1)';
+    clearTimeout(fbTmr);
+    fbTmr=setTimeout(()=>{
+      fbEl.style.transition='opacity .18s';
+      fbEl.style.opacity='0';
+      setTimeout(()=>{ fbEl.style.opacity='1'; fbEl.style.transform='translate(-50%,-50%) scale(0)'; },200);
+    },720);
+  });
+}
+
+// ── Shake ─────────────────────────────────────────────────────
+function shake(){
+  cv.style.transition='none';
+  let n=0;
+  const id=setInterval(()=>{
+    cv.style.transform=`translateX(${n%2?-7:7}px)`;
+    if(++n>5){ clearInterval(id); cv.style.transform=''; }
+  },45);
+}
+
+// ── Game state ────────────────────────────────────────────────
+let bubbles=[], score=0, saved=0, timeLeft=60;
+let running=false, spawnTmr, tickTmr, rafId;
+
+const svEl=document.getElementById('sv');
+const tvEl=document.getElementById('tv');
+const rvEl=document.getElementById('rv');
+
+// ── Pop handler ───────────────────────────────────────────────
+function handleClick(px,py){
+  if(!running) return;
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];
+    if(b.popping||!b.hit(px,py)) continue;
+    b.pop();
+    if(!b.char.bad){
+      score+=10; saved++;
+      svEl.textContent=score; rvEl.textContent=saved;
+      playHero();
+      const msgs=['棒棒哒！','救到啦！','太厉害了！','超级英雄！','耶！🎉'];
+      showFB(msgs[Math.floor(Math.random()*msgs.length)],'#1B5E20');
+      spawnFloater(b.x, b.y-b.r, '+10 ⭐','#2E7D32');
+    } else {
+      score=Math.max(0,score-5);
+      svEl.textContent=score;
+      playBad();
+      const msgs=['哎呀！','小心！','是坏蛋！','噢不！'];
+      showFB(msgs[Math.floor(Math.random()*msgs.length)],'#B71C1C');
+      spawnFloater(b.x, b.y-b.r, '-5 💥','#C62828');
+      shake();
+    }
+    break;
+  }
+}
+
+cv.addEventListener('click', e=>{
+  const r=cv.getBoundingClientRect();
+  handleClick(e.clientX-r.left, e.clientY-r.top);
+});
+cv.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(), t=e.touches[0];
+  handleClick(t.clientX-r.left, t.clientY-r.top);
+},{passive:false});
+
+// ── Spawn scheduler ───────────────────────────────────────────
+function scheduleSpawn(){
+  if(!running) return;
+  const alive=bubbles.filter(b=>!b.dead&&!b.popping).length;
+  if(alive<8) bubbles.push(new Bubble());
+  const delay = timeLeft>35 ? 1200 : timeLeft>15 ? 850 : 600;
+  spawnTmr=setTimeout(scheduleSpawn, delay+Math.random()*350);
+}
+
+// ── Main loop ─────────────────────────────────────────────────
+function loop(){
+  ctx.clearRect(0,0,W,H);
+  bubbles.forEach(b=>b.update());
+  bubbles=bubbles.filter(b=>!b.dead);
+  bubbles.forEach(b=>b.draw(ctx));
+  if(running) rafId=requestAnimationFrame(loop);
+}
+
+// ── Timer ─────────────────────────────────────────────────────
+function tick(){
+  if(!running) return;
+  timeLeft--;
+  tvEl.textContent=timeLeft;
+  if(timeLeft<=10) tvEl.classList.add('hurry');
+  if(timeLeft<=0){ endGame(); return; }
+  tickTmr=setTimeout(tick,1000);
+}
+
+// ── Countdown ─────────────────────────────────────────────────
+const cdEl=document.getElementById('cd');
+function doCountdown(cb){
+  const steps=['3','2','1','出发！'];
+  let i=0;
+  function step(){
+    cdEl.textContent=steps[i];
+    cdEl.style.transition='none';
+    cdEl.style.transform='translate(-50%,-50%) scale(0)';
+    cdEl.style.color= i<3?'#fff':'#FFD700';
+    requestAnimationFrame(()=>{
+      cdEl.style.transition='transform .2s cubic-bezier(.17,.67,.3,1.3)';
+      cdEl.style.transform='translate(-50%,-50%) scale(1)';
+      setTimeout(()=>{
+        cdEl.style.transition='opacity .15s';
+        cdEl.style.opacity='0';
+        setTimeout(()=>{
+          cdEl.style.opacity='1';
+          cdEl.style.transform='translate(-50%,-50%) scale(0)';
+          i++;
+          if(i<steps.length) setTimeout(step,380);
+          else cb();
+        },150);
+      },520);
+    });
+  }
+  step();
+}
+
+// ── Start / End ───────────────────────────────────────────────
+function startGame(){
+  score=0; saved=0; timeLeft=60;
+  bubbles=[]; running=false;
+  svEl.textContent='0'; tvEl.textContent='60'; rvEl.textContent='0';
+  tvEl.classList.remove('hurry');
+  document.getElementById('startScr').style.display='none';
+  document.getElementById('endScr').style.display='none';
+  cancelAnimationFrame(rafId);
+  clearTimeout(spawnTmr); clearTimeout(tickTmr);
+  playStart();
+  doCountdown(()=>{
+    running=true;
+    // seed 3 bubbles immediately
+    for(let i=0;i<3;i++) bubbles.push(new Bubble());
+    scheduleSpawn();
+    tick();
+    loop();
+  });
+}
+
+function endGame(){
+  running=false;
+  clearTimeout(spawnTmr); clearTimeout(tickTmr);
+  cancelAnimationFrame(rafId);
+  // draw last frame
+  ctx.clearRect(0,0,W,H);
+  bubbles.forEach(b=>b.draw(ctx));
+
+  saved>=5 ? playWin() : playLose();
+
+  const rs=document.getElementById('endScr');
+  rs.style.display='flex';
+  document.getElementById('endTitle').textContent =
+    saved>=8?'超级英雄！🌟': saved>=5?'太棒了！🏆':'任务完成！🎉';
+  document.getElementById('endEmoji').textContent =
+    saved>=8?'🌟': saved>=5?'🏆':'🎖️';
+  document.getElementById('endMsg').innerHTML =
+    `你救了 <b style="font-size:1.35em;color:#FFD700">${saved}</b> 位超级飞侠<br>
+     获得 <b style="font-size:1.35em;color:#FFD700">${score}</b> 分！<br><br>
+     ${saved>=8?'🌟 超级飞侠为你骄傲！': saved>=5?'💪 做得很棒，再来一次！':'🚀 继续加油！'}`;
+}
+
+// ── Clouds ────────────────────────────────────────────────────
+(function makeClouds(){
+  const sky=document.getElementById('sky');
+  for(let i=0;i<6;i++){
+    const c=document.createElement('div');
+    c.className='cloud';
+    const w=90+Math.random()*120, h=w*.42;
+    const top=4+Math.random()*32;
+    const dur=20+Math.random()*20;
+    c.style.cssText=`width:${w}px;height:${h}px;top:${top}%;left:-220px;
+      animation-duration:${dur}s;animation-delay:${-Math.random()*dur}s;`;
+    sky.appendChild(c);
+  }
+})();
+
+// ── Wire up buttons ───────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+// ── PWA Service Worker 注册 ───────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.log('SW error:', err));
+  });
+}
+</script>
+</body>
+</html>
